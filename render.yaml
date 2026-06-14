@@ -22,11 +22,9 @@ services:
       - key: ENVIRONMENT
         value: production
 
-      # URL PostgreSQL — injectée depuis la base créée ci-dessous
+      # URL PostgreSQL Supabase — a definir manuellement dans le dashboard Render
       - key: DATABASE_URL
-        fromDatabase:
-          name: gestfive-db
-          property: connectionString   # format postgresql://... — transformé par config.py
+        sync: false
 
       # Clé JWT — générée par Render au premier déploiement
       - key: SECRET_KEY
@@ -38,7 +36,7 @@ services:
 
       # Hosts autorisés (TrustedHostMiddleware en production)
       - key: ALLOWED_HOSTS
-        value: '["gestfive-api.onrender.com"]'
+        value: '["gest-five-api.onrender.com"]'
 
       # Serveur
       - key: PORT
@@ -67,9 +65,3 @@ services:
       # FIREBASE_PROJECT_ID      <votre-projet-firebase>
       # FIREBASE_CREDENTIALS_PATH  /etc/secrets/firebase-service-account.json
 
-databases:
-  - name: gestfive-db
-    plan: starter           # PostgreSQL starter ($7/mois, 1 GB, 97 connexions max)
-    region: frankfurt
-    databaseName: gestfive
-    user: gestfive
