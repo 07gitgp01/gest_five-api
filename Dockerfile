@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 RUN pip install --upgrade pip \
-    && pip wheel --no-deps --wheel-dir /wheels -r requirements.txt
+    && pip wheel --wheel-dir /wheels -r requirements.txt
 
 
 # ── Stage 2 : image de production ────────────────────────────────────────────
