@@ -31,6 +31,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
 
+
       # CORS — Flutter mobile n'envoie pas d'origine, * est sûr pour une API mobile
       - key: ALLOWED_ORIGINS
         value: '["*"]'
