@@ -66,3 +66,9 @@ services:
       # FIREBASE_PROJECT_ID      <votre-projet-firebase>
       # FIREBASE_CREDENTIALS_PATH  /etc/secrets/firebase-service-account.json
 
+databases:
+  - name: gestfive-db
+    plan: starter           # PostgreSQL starter ($7/mois, 1 GB, 97 connexions max)
+    region: frankfurt
+    databaseName: gestfive
+    user: gestfive
