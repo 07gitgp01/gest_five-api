@@ -22,10 +22,11 @@ services:
       - key: ENVIRONMENT
         value: production
 
-      # URL PostgreSQL Supabase — à définir manuellement dans le dashboard Render
-      # Format : postgresql://postgres.[ref]:[password]@db.[ref].supabase.co:5432/postgres?sslmode=require
+      # URL PostgreSQL — injectée depuis la base créée ci-dessous
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: gestfive-db
+          property: connectionString   # format postgresql://... — transformé par config.py
 
       # Clé JWT — générée par Render au premier déploiement
       - key: SECRET_KEY
