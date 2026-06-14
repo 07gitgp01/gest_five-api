@@ -63,6 +63,19 @@ class TerrainRepository(BaseRepository[Terrain]):
         )
         return result.scalar_one_or_none()
 
+    async def get_for_update(self, terrain_id: uuid.UUID) -> Terrain | None:
+        """
+        Acquiert un verrou exclusif SELECT … FOR UPDATE sur le terrain.
+
+        Utilisé par les réservations directes pour sérialiser les écritures
+        concurrentes sur le même terrain et éliminer la race condition TOCTOU.
+        No-op en SQLite (mono-writer par design) ; efficace en PostgreSQL.
+        """
+        result = await self.db.execute(
+            select(Terrain).where(Terrain.id == terrain_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     # ── Espace propriétaire ───────────────────────────────────────────────────
 
     async def get_by_owner(

@@ -1,0 +1,75 @@
+# render.yaml — Render Blueprint pour GestFive
+# Documentation : https://render.com/docs/blueprint-spec
+#
+# Déploiement :
+#   1. Connecter ce repo à Render
+#   2. Render détecte render.yaml et crée les services automatiquement
+#   3. Configurer manuellement les secrets (SECRET_KEY, clés paiement, Firebase)
+#      dans Dashboard > Environment
+
+services:
+  - type: web
+    name: gestfive-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter          # starter = 512 MB RAM, 0.5 CPU ($7/mois)
+    region: frankfurt      # le plus proche d'Afrique de l'Ouest
+    branch: main
+    healthCheckPath: /health
+
+    # Variables injectées automatiquement par Render
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+
+      # URL PostgreSQL — injectée depuis la base créée ci-dessous
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestfive-db
+          property: connectionString   # format postgresql://... — transformé par config.py
+
+      # Clé JWT — générée par Render au premier déploiement
+      - key: SECRET_KEY
+        generateValue: true
+
+      # CORS — Flutter mobile n'envoie pas d'origine, * est sûr pour une API mobile
+      - key: ALLOWED_ORIGINS
+        value: '["*"]'
+
+      # Hosts autorisés (TrustedHostMiddleware en production)
+      - key: ALLOWED_HOSTS
+        value: '["gestfive-api.onrender.com"]'
+
+      # Serveur
+      - key: PORT
+        value: "10000"         # Render attend l'écoute sur ce port
+      - key: WORKERS
+        value: "1"             # 1 worker pour le plan starter (512 MB)
+      - key: LOG_LEVEL
+        value: "info"
+
+      # Tokens
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+
+      # ── À configurer manuellement dans le dashboard Render ──────────────────
+      # ORANGE_MONEY_MERCHANT_KEY
+      # ORANGE_MONEY_WEBHOOK_SECRET
+      # MOOV_MONEY_API_KEY
+      # MOOV_MONEY_WEBHOOK_SECRET
+      # CARD_PAYMENT_API_KEY
+      # CARD_PAYMENT_WEBHOOK_SECRET
+      # PAYMENT_SUCCESS_URL      https://gestfive-api.onrender.com/payment/success
+      # PAYMENT_CANCEL_URL       https://gestfive-api.onrender.com/payment/cancel
+      # FIREBASE_ENABLED         true
+      # FIREBASE_PROJECT_ID      <votre-projet-firebase>
+      # FIREBASE_CREDENTIALS_PATH  /etc/secrets/firebase-service-account.json
+
+databases:
+  - name: gestfive-db
+    plan: starter           # PostgreSQL starter ($7/mois, 1 GB, 97 connexions max)
+    region: frankfurt
+    databaseName: gestfive
+    user: gestfive

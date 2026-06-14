@@ -1,32 +1,66 @@
+# docker-compose.yml — Environnement de développement local
+#
+# Usage :
+#   docker compose up --build        # démarrage complet (migrations + API)
+#   docker compose up --build api    # API seulement (si DB tourne déjà)
+#   docker compose exec api alembic revision --autogenerate -m "ma migration"
+#   docker compose exec db psql -U gestfive gestfive
+
 services:
+
+  # ── API FastAPI ─────────────────────────────────────────────────────────────
   api:
-    build: .
+    build:
+      context: .
+      target: runtime          # utilise le stage runtime du Dockerfile multi-stage
+    # Remplace CMD : hot-reload activé + log direct ; pas de start.sh en dev
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug"
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://gestfive:gestfive@db:5432/gestfive
-      - ENVIRONMENT=production
+    volumes:
+      # Monte le code source pour le hot-reload
+      - .:/app
+      # Exclut le venv conteneur du montage hôte
+      - /app/__pycache__
     env_file:
-      - .env
+      - .env                    # charge le fichier .env si présent
+    environment:
+      DATABASE_URL: postgresql+asyncpg://gestfive:gestfive@db:5432/gestfive
+      ENVIRONMENT: development
+      DEBUG: "true"
+      LOG_LEVEL: debug
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
+  # ── PostgreSQL 16 ───────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: gestfive
       POSTGRES_PASSWORD: gestfive
       POSTGRES_DB: gestfive
+    ports:
+      - "5432:5432"             # accès direct depuis l'hôte (DBeaver, psql, etc.)
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gestfive"]
+      test: ["CMD-SHELL", "pg_isready -U gestfive -d gestfive"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local

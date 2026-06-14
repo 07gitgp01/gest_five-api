@@ -36,9 +36,7 @@ class Terrain(Base, TimestampMixin):
     city: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Liste d'URLs stockée en JSON
     photos: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    # Horaires par jour {"monday": {"open": "08:00", "close": "22:00", "is_closed": false}, ...}
     opening_hours: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     price_per_hour: Mapped[float] = mapped_column(Float, nullable=False)
     capacity: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
@@ -46,7 +44,6 @@ class Terrain(Base, TimestampMixin):
     has_changing_room: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     has_shower: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     has_lighting: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # Mis à jour lors de l'ajout / suppression d'un avis
     average_rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     status: Mapped[TerrainStatus] = mapped_column(
         SAEnum(TerrainStatus),
@@ -57,6 +54,11 @@ class Terrain(Base, TimestampMixin):
 
     owner: Mapped["User"] = relationship(back_populates="terrains")
     reservations: Mapped[list["Reservation"]] = relationship(
+        back_populates="terrain",
+        lazy="select",
+        cascade="all, delete-orphan",
+    )
+    time_slots: Mapped[list["TimeSlot"]] = relationship(
         back_populates="terrain",
         lazy="select",
         cascade="all, delete-orphan",

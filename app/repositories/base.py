@@ -3,7 +3,7 @@ from typing import Any, Generic, Type, TypeVar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base import Base
+from app.db.base import Base, TimestampMixin
 
 ModelType = TypeVar("ModelType", bound=Base)
 
@@ -18,7 +18,12 @@ class BaseRepository(Generic[ModelType]):
         return result.scalar_one_or_none()
 
     async def get_all(self, skip: int = 0, limit: int = 20) -> list[ModelType]:
-        result = await self.db.execute(select(self.model).offset(skip).limit(limit))
+        """Retourne les entités ordonnées par created_at DESC pour une pagination déterministe."""
+        stmt = select(self.model)
+        # ORDER BY created_at si le modèle hérite de TimestampMixin
+        if issubclass(self.model, TimestampMixin):
+            stmt = stmt.order_by(self.model.created_at.desc())  # type: ignore[attr-defined]
+        result = await self.db.execute(stmt.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     async def create(self, obj_in: dict[str, Any]) -> ModelType:

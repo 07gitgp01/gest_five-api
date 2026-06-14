@@ -35,6 +35,11 @@ class User(Base, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Token FCM pour les notifications push (mis à jour par l'app mobile)
+    fcm_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     terrains: Mapped[list["Terrain"]] = relationship(back_populates="owner", lazy="select")
     reservations: Mapped[list["Reservation"]] = relationship(back_populates="player", lazy="select")
+    notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="user", lazy="select", cascade="all, delete-orphan"
+    )

@@ -1,5 +1,6 @@
 import uuid
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictException, UnauthorizedException
@@ -21,21 +22,28 @@ class AuthService:
         self.repo = UserRepository(db)
 
     async def register(self, data: UserRegister) -> Token:
+        # Vérifications séquentielles explicites pour retourner le bon message
         if await self.repo.phone_exists(data.phone):
             raise ConflictException("Un compte avec ce numéro existe déjà")
         if data.email and await self.repo.email_exists(data.email):
             raise ConflictException("Un compte avec cet email existe déjà")
 
-        user = await self.repo.create(
-            {
+        try:
+            user = await self.repo.create({
                 "firstname": data.firstname,
                 "lastname": data.lastname,
                 "phone": data.phone,
                 "email": data.email,
                 "role": data.role,
                 "hashed_password": hash_password(data.password),
-            }
-        )
+            })
+        except IntegrityError:
+            # Deux inscriptions concurrentes avec le même numéro/email →
+            # la contrainte UNIQUE de la DB se déclenche ; retourne 409 propre.
+            raise ConflictException(
+                "Un compte avec ce numéro ou cet email existe déjà"
+            )
+
         return Token(
             access_token=create_access_token(user.id),
             refresh_token=create_refresh_token(user.id),
@@ -44,8 +52,8 @@ class AuthService:
     async def login(self, data: UserLogin) -> Token:
         user = await self.repo.get_by_phone(data.phone)
 
-        # Comparaison en temps constant — on vérifie même si user est None
-        # pour éviter les attaques par timing (enumeration via temps de réponse)
+        # Vérification en temps constant même si user est None —
+        # empêche l'énumération de comptes par mesure du temps de réponse.
         password_ok = verify_password(data.password, user.hashed_password) if user else False
 
         if not user or not password_ok:
