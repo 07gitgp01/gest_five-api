@@ -1,3 +1,4 @@
+import re
 from typing import List
 
 from pydantic import field_validator
@@ -30,9 +31,17 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def fix_postgres_url(cls, v: str) -> str:
-        # Render fournit postgresql:// ; asyncpg exige postgresql+asyncpg://
-        if isinstance(v, str) and v.startswith("postgresql://"):
-            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if not isinstance(v, str):
+            return v
+        # Render/Supabase fournissent postgresql:// ; asyncpg exige postgresql+asyncpg://
+        if v.startswith("postgresql://"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # asyncpg utilise ssl= et non sslmode= (libpq) ; on traduit
+        v = re.sub(r"\bsslmode=", "ssl=", v)
+        # pgbouncer= n'est pas un paramètre asyncpg valide ; on le retire
+        v = re.sub(r"[?&]pgbouncer=[^&]*", "", v)
+        # Nettoyer un éventuel ? ou & résiduel en fin d'URL
+        v = re.sub(r"[?&]$", "", v)
         return v
 
     # Connection pool (ignoré pour SQLite)
