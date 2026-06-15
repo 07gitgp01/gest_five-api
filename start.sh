@@ -3,7 +3,7 @@
 # Render injecte $PORT (généralement 10000) ; fallback 8000 en local.
 set -e
 
-echo "[start.sh] Environnement : ${ENVIRONMENT:-development}"
+echo "[start.sh] Environnement : ${ENVIRONMENT:-production}"
 echo "[start.sh] Base de données : ${DATABASE_URL%%@*}@***"
 
 echo "[start.sh] Application des migrations Alembic..."
