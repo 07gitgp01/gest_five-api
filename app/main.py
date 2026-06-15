@@ -106,13 +106,17 @@ def create_application() -> FastAPI:
     async def validation_error_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        """Pydantic V2 : reformate les erreurs de validation en JSON cohérent."""
+        errors = exc.errors(include_url=False)
+        # Pydantic v2 stocke l'objet Exception dans ctx['error'] — pas JSON-sérialisable
+        for error in errors:
+            if "ctx" in error:
+                error["ctx"] = {
+                    k: str(v) if isinstance(v, Exception) else v
+                    for k, v in error["ctx"].items()
+                }
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={
-                "message": "Données invalides",
-                "detail": exc.errors(),
-            },
+            content={"message": "Données invalides", "detail": errors},
         )
 
     @application.exception_handler(SQLAlchemyError)
