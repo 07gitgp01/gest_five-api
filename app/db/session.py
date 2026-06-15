@@ -1,7 +1,7 @@
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -10,7 +10,7 @@ from app.db.base import Base
 logger = get_logger(__name__)
 
 # SQLite : NullPool obligatoire (pas de vraie gestion de pool en async)
-# PostgreSQL : QueuePool avec dimensionnement explicite
+# PostgreSQL : AsyncAdaptedQueuePool par défaut (automatique avec create_async_engine)
 if settings.is_sqlite:
     engine = create_async_engine(
         settings.DATABASE_URL,
@@ -21,7 +21,6 @@ else:
     engine = create_async_engine(
         settings.DATABASE_URL,
         echo=settings.DEBUG,
-        poolclass=QueuePool,
         pool_size=settings.DB_POOL_SIZE,
         max_overflow=settings.DB_MAX_OVERFLOW,
         pool_timeout=settings.DB_POOL_TIMEOUT,
