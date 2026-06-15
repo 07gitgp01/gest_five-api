@@ -10,7 +10,6 @@ echo "[start.sh] Application des migrations Alembic..."
 alembic upgrade head
 echo "[start.sh] Migrations OK."
 
-
 WORKERS="${WORKERS:-1}"
 PORT="${PORT:-8000}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
