@@ -119,32 +119,29 @@ def create_application() -> FastAPI:
     async def db_error_handler(
         request: Request, exc: SQLAlchemyError
     ) -> JSONResponse:
-        """Capture les erreurs SQLAlchemy non gérées avant qu'elles remontent en 500 générique."""
         logger.exception("Erreur base de données non gérée : %s", exc)
+        detail = str(exc) if settings.DEBUG else "Erreur base de données — réessayez dans quelques instants."
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={
-                "message": "Service temporairement indisponible",
-                "detail": "Erreur base de données — réessayez dans quelques instants.",
-            },
+            content={"message": "Service temporairement indisponible", "detail": detail},
         )
 
     @application.exception_handler(Exception)
     async def unhandled_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        """Filet de sécurité : capture toute exception non prévue et log le traceback complet."""
         logger.exception(
             "Exception non gérée sur %s %s : %s",
             request.method,
             request.url.path,
             exc,
         )
+        detail = str(exc) if settings.DEBUG else "Une erreur inattendue s'est produite."
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "message": "Erreur interne du serveur",
-                "detail": "Une erreur inattendue s'est produite. L'équipe a été notifiée.",
+                "detail": detail,
             },
         )
 
