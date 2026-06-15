@@ -106,7 +106,7 @@ def create_application() -> FastAPI:
     async def validation_error_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        errors = exc.errors(include_url=False)
+        errors = exc.errors()
         # Pydantic v2 stocke l'objet Exception dans ctx['error'] — pas JSON-sérialisable
         for error in errors:
             if "ctx" in error:
