@@ -1,5 +1,6 @@
 import re
 from typing import List
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,16 +34,17 @@ class Settings(BaseSettings):
     def fix_postgres_url(cls, v: str) -> str:
         if not isinstance(v, str):
             return v
-        # Render/Supabase fournissent postgresql:// ; asyncpg exige postgresql+asyncpg://
+        v = v.strip('"\'')   # certains shells/OS gardent les guillemets du .env
         if v.startswith("postgresql://"):
             v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
-        # asyncpg utilise ssl= et non sslmode= (libpq) ; on traduit
-        v = re.sub(r"\bsslmode=", "ssl=", v)
-        # pgbouncer= n'est pas un paramètre asyncpg valide ; on le retire
-        v = re.sub(r"[?&]pgbouncer=[^&]*", "", v)
-        # Nettoyer un éventuel ? ou & résiduel en fin d'URL
-        v = re.sub(r"[?&]$", "", v)
-        return v
+        # Nettoyage des query params via urllib pour éviter les URLs malformées
+        parsed = urlparse(v)
+        params = {k: vals[0] for k, vals in parse_qs(parsed.query).items()}
+        params.pop("pgbouncer", None)           # non supporté par asyncpg
+        if "sslmode" in params:                 # asyncpg utilise ssl= et non sslmode=
+            params["ssl"] = params.pop("sslmode")
+        new_query = urlencode(params)
+        return urlunparse(parsed._replace(query=new_query))
 
     # Connection pool (ignoré pour SQLite)
     DB_POOL_SIZE: int = 10
