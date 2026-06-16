@@ -50,14 +50,18 @@ class AuthService:
         )
 
     async def login(self, data: UserLogin) -> Token:
-        user = await self.repo.get_by_phone(data.phone)
+        identifier = data.identifier.strip()
+        if "@" in identifier:
+            user = await self.repo.get_by_email(identifier.lower())
+        else:
+            user = await self.repo.get_by_phone(identifier)
 
         # Vérification en temps constant même si user est None —
         # empêche l'énumération de comptes par mesure du temps de réponse.
         password_ok = verify_password(data.password, user.hashed_password) if user else False
 
         if not user or not password_ok:
-            raise UnauthorizedException("Numéro ou mot de passe incorrect")
+            raise UnauthorizedException("Identifiant ou mot de passe incorrect")
         if not user.is_active:
             raise UnauthorizedException("Compte désactivé")
 

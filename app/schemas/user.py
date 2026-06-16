@@ -64,7 +64,7 @@ class UserRegister(BaseModel):
 
 
 class UserLogin(BaseModel):
-    phone: str
+    identifier: str  # email ou numéro de téléphone
     password: str
 
 
