@@ -1,4 +1,5 @@
 import calendar
+import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
@@ -160,12 +161,24 @@ def _build_stats(terrain_row, revenue_row) -> OwnerStats:
     )
 
 
+def _parse_opening_hours(raw) -> dict:
+    """opening_hours est sélectionné en ::text depuis PG — on re-parse en dict."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
+    return {}
+
+
 def _build_occupancy(rows, year: int, month: int) -> list[TerrainOccupancy]:
     result = []
     for row in rows:
         booked_hours = round((row.booked_minutes or 0.0) / 60, 2)
         capacity_hours = _compute_capacity_hours(
-            row.opening_hours or {}, year, month
+            _parse_opening_hours(row.opening_hours), year, month
         )
         if capacity_hours > 0:
             rate = round((booked_hours / capacity_hours) * 100, 1)

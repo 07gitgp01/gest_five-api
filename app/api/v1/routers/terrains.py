@@ -1,6 +1,9 @@
+import asyncio
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import cloudinary
+import cloudinary.uploader
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import PaginationParams, get_current_active_user, require_owner_or_admin
@@ -99,6 +102,39 @@ async def list_my_terrains(
 )
 async def get_terrain(terrain_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     return await TerrainService(db).get_detail(terrain_id)
+
+
+# ── Upload photo ──────────────────────────────────────────────────────────────
+
+@router.post(
+    "/upload-photo",
+    summary="Uploader une photo de terrain",
+    description="Upload une image vers Cloudinary et retourne l'URL publique.",
+)
+async def upload_terrain_photo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_owner_or_admin),
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Fichier image requis (JPEG, PNG, WebP)")
+
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image trop volumineuse (max 10 Mo)")
+
+    try:
+        result = await asyncio.to_thread(
+            cloudinary.uploader.upload,
+            contents,
+            folder="gestfive/terrains",
+            transformation=[{"width": 800, "height": 600, "crop": "fill", "quality": "auto:good"}],
+            resource_type="image",
+        )
+        logger.info("PHOTO uploaded — owner=%s public_id=%s", current_user.id, result.get("public_id"))
+        return {"url": result["secure_url"]}
+    except Exception as e:
+        logger.exception("PHOTO upload erreur — owner=%s", current_user.id)
+        raise HTTPException(status_code=500, detail=f"Erreur upload Cloudinary: {e}")
 
 
 # ── Endpoints propriétaire ─────────────────────────────────────────────────────

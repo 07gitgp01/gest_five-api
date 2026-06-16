@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import and_, case, extract, func, select
+from sqlalchemy import Text, and_, case, extract, func, select
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,7 +109,8 @@ class OwnerDashboardRepository:
                 Terrain.id.label("terrain_id"),
                 Terrain.name.label("terrain_name"),
                 Terrain.city.label("terrain_city"),
-                Terrain.opening_hours.label("opening_hours"),
+                # Cast json→text : json n'a pas d'opérateur d'égalité en PG
+                Terrain.opening_hours.cast(Text).label("opening_hours"),
                 func.coalesce(func.sum(self._duration_expr), 0.0).label(
                     "booked_minutes"
                 ),
@@ -118,7 +119,10 @@ class OwnerDashboardRepository:
             .outerjoin(Reservation, res_filter)
             .where(Terrain.owner_id == owner_id)
             .group_by(
-                Terrain.id, Terrain.name, Terrain.city, Terrain.opening_hours
+                Terrain.id,
+                Terrain.name,
+                Terrain.city,
+                Terrain.opening_hours.cast(Text),
             )
             .order_by(Terrain.name)
         )
