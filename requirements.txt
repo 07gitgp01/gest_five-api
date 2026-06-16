@@ -30,3 +30,6 @@ pytest-cov==6.0.0
 
 # Dev utilities
 rich==13.9.4
+
+# Media
+cloudinary==1.41.0
