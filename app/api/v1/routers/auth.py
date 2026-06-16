@@ -54,23 +54,23 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
 async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     try:
         token = await AuthService(db).login(data)
-        logger.info("LOGIN ok — identifier=%s", data.identifier[:4] + "***")
+        logger.info("LOGIN ok — identifier=%s", data.phone[:4] + "***")
         return token
     except HTTPException as exc:
         if exc.status_code == 401:
             logger.warning(
                 "LOGIN refusé — identifier=%s raison=identifiants invalides",
-                data.identifier[:4] + "***",
+                data.phone[:4] + "***",
             )
         else:
             logger.warning(
                 "LOGIN rejeté — identifier=%s code=%d",
-                data.identifier[:4] + "***",
+                data.phone[:4] + "***",
                 exc.status_code,
             )
         raise
     except Exception:
-        logger.exception("LOGIN erreur inattendue — identifier=%s", data.identifier[:4] + "***")
+        logger.exception("LOGIN erreur inattendue — identifier=%s", data.phone[:4] + "***")
         raise
 
 

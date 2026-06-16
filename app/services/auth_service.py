@@ -50,7 +50,7 @@ class AuthService:
         )
 
     async def login(self, data: UserLogin) -> Token:
-        identifier = data.identifier.strip()
+        identifier = data.phone.strip()
         if "@" in identifier:
             user = await self.repo.get_by_email(identifier.lower())
         else:
