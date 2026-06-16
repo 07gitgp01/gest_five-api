@@ -23,12 +23,12 @@ from app.api.v1.routers import (
     users,
 )
 from app.core.config import settings
-from app.core.logging import setup_logging
+from app.core.logging import get_logger, request_id_var, setup_logging
 from app.db.session import check_db_connection, init_db
 
 setup_logging()
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Timestamp de démarrage — utilisé par /health pour calculer l'uptime
 _START_TIME: float = 0.0
@@ -38,9 +38,29 @@ _START_TIME: float = 0.0
 async def lifespan(app: FastAPI):
     global _START_TIME
     _START_TIME = time.time()
-    await init_db()
+
     logger.info(
-        "GestFive API démarré | version=%s environnement=%s",
+        "GestFive API démarrage | version=%s env=%s log_level=%s debug=%s",
+        settings.VERSION,
+        settings.ENVIRONMENT,
+        settings.LOG_LEVEL,
+        settings.DEBUG,
+    )
+
+    if settings.is_sqlite:
+        logger.info("DB: SQLite (dev) | pool=NullPool")
+    else:
+        logger.info(
+            "DB: PostgreSQL | pool_size=%d max_overflow=%d recycle=%ds",
+            settings.DB_POOL_SIZE,
+            settings.DB_MAX_OVERFLOW,
+            settings.DB_POOL_RECYCLE,
+        )
+
+    await init_db()
+
+    logger.info(
+        "GestFive API prêt à recevoir des requêtes | version=%s env=%s",
         settings.VERSION,
         settings.ENVIRONMENT,
     )
@@ -70,7 +90,7 @@ def create_application() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
+        expose_headers=["X-Request-ID", "X-Process-Time"],
     )
 
     if settings.ENVIRONMENT == "production":
@@ -79,25 +99,41 @@ def create_application() -> FastAPI:
             allowed_hosts=settings.ALLOWED_HOSTS,
         )
 
-    # ── Middleware : logging des requêtes + X-Request-ID ─────────────────────
+    # ── Middleware : logging + propagation du request_id ─────────────────────
 
     @application.middleware("http")
     async def request_logging_middleware(request: Request, call_next):
         request_id = str(uuid_lib.uuid4())[:8]
+        ctx_token = request_id_var.set(request_id)
         start = time.perf_counter()
+
+        client_ip = request.client.host if request.client else "?"
+        logger.debug(
+            "→ %s %s [%s] ip=%s",
+            request.method,
+            request.url.path,
+            request_id,
+            client_ip,
+        )
 
         response = await call_next(request)
 
         duration_ms = (time.perf_counter() - start) * 1000
-        logger.info(
-            "%s %s → %d (%.0f ms) [%s]",
+        request_id_var.reset(ctx_token)
+
+        log_level = logging.WARNING if response.status_code >= 400 else logging.INFO
+        logger.log(
+            log_level,
+            "← %s %s %d (%.0f ms) [%s]",
             request.method,
             request.url.path,
             response.status_code,
             duration_ms,
             request_id,
         )
+
         response.headers["X-Request-ID"] = request_id
+        response.headers["X-Process-Time"] = f"{duration_ms:.0f}ms"
         return response
 
     # ── Gestionnaires d'erreurs globaux ───────────────────────────────────────
@@ -114,6 +150,16 @@ def create_application() -> FastAPI:
                     k: str(v) if isinstance(v, Exception) else v
                     for k, v in error["ctx"].items()
                 }
+        logger.warning(
+            "422 Validation — %s %s : %d champ(s) invalide(s) %s",
+            request.method,
+            request.url.path,
+            len(errors),
+            [
+                f"{'.'.join(str(l) for l in e.get('loc', []))} {e.get('msg', '')}"
+                for e in errors[:3]
+            ],
+        )
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"message": "Données invalides", "detail": errors},

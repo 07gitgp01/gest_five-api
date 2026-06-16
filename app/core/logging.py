@@ -1,9 +1,28 @@
 import json
 import logging
 import sys
+from contextvars import ContextVar
 from datetime import datetime, timezone
 
 from app.core.config import settings
+
+# ── Propagation du request_id dans les logs async ─────────────────────────────
+# Initialisé par le middleware HTTP avant chaque requête ;
+# tous les loggers appelés dans le même contexte asyncio héritent de la valeur.
+request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+def mask_phone(phone: str) -> str:
+    """Remplace les 4 derniers chiffres par **** pour ne pas exposer les numéros dans les logs."""
+    return phone[:-4] + "****" if len(phone) >= 4 else "****"
+
+
+class _RequestContextFilter(logging.Filter):
+    """Injecte automatiquement request_id dans chaque LogRecord."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = request_id_var.get()
+        return True
 
 
 class _JSONFormatter(logging.Formatter):
@@ -21,25 +40,34 @@ class _JSONFormatter(logging.Formatter):
         }
         if record.exc_info:
             obj["exception"] = self.formatException(record.exc_info)
-        # Champs contextuels optionnels ajoutés par les middlewares
+        # Champs contextuels injectés par _RequestContextFilter et les middlewares
         for key in ("request_id", "method", "path", "status_code", "duration_ms"):
             if hasattr(record, key):
                 obj[key] = getattr(record, key)
         return json.dumps(obj, ensure_ascii=False)
 
 
+def _parse_level(level_str: str) -> int:
+    """Convertit la chaîne LOG_LEVEL en constante logging (défaut : INFO)."""
+    return getattr(logging, level_str.upper(), logging.INFO)
+
+
 def setup_logging() -> None:
-    level = logging.DEBUG if settings.DEBUG else logging.INFO
+    level = _parse_level(settings.LOG_LEVEL)
+    # En mode DEBUG explicite, forcer le niveau même si LOG_LEVEL ne l'indique pas
+    if settings.DEBUG:
+        level = min(level, logging.DEBUG)
+
+    ctx_filter = _RequestContextFilter()
 
     if settings.ENVIRONMENT == "production":
-        # Logs JSON vers stdout — capturés par Render / tout agrégateur
         handler: logging.Handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(_JSONFormatter())
         fmt = "%(message)s"
     else:
-        # Logs Rich colorés pour le développement local
         from rich.console import Console
         from rich.logging import RichHandler
+
         handler = RichHandler(
             console=Console(),
             rich_tracebacks=True,
@@ -47,15 +75,17 @@ def setup_logging() -> None:
         )
         fmt = "%(message)s"
 
+    handler.addFilter(ctx_filter)
+
     logging.basicConfig(
         level=level,
         format=fmt,
         datefmt="[%X]",
         handlers=[handler],
-        force=True,    # remplace les handlers éventuellement enregistrés par uvicorn
+        force=True,  # remplace les handlers enregistrés par uvicorn
     )
 
-    # Silence les loggers trop verbeux
+    # Silence les loggers trop verbeux par défaut
     for name in ("uvicorn.access", "sqlalchemy.engine", "httpx"):
         logging.getLogger(name).setLevel(
             logging.DEBUG if settings.DEBUG else logging.WARNING

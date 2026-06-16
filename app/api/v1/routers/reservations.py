@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -9,6 +9,7 @@ from app.api.deps import (
     get_current_active_user,
     require_owner_or_admin,
 )
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.reservation import ReservationStatus
 from app.models.user import User
@@ -17,6 +18,7 @@ from app.schemas.reservation import ReservationCreate, ReservationResponse, Rese
 from app.services.reservation_service import ReservationService
 
 router = APIRouter()
+logger = get_logger("gestfive.reservations")
 
 
 # ── Client ────────────────────────────────────────────────────────────────────
@@ -36,7 +38,22 @@ async def create_reservation(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await ReservationService(db).create(current_user, data)
+    try:
+        reservation = await ReservationService(db).create(current_user, data)
+        terrain_ref = getattr(data, "terrain_id", None) or getattr(data, "time_slot_id", "?")
+        logger.info(
+            "RESERVATION created — id=%s terrain_ref=%s player_id=%s prix=%.0f",
+            reservation.id,
+            terrain_ref,
+            current_user.id,
+            getattr(reservation, "total_price", 0),
+        )
+        return reservation
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("RESERVATION create erreur — player_id=%s", current_user.id)
+        raise
 
 
 @router.get(
@@ -80,7 +97,21 @@ async def cancel_reservation(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await ReservationService(db).cancel(current_user, reservation_id)
+    try:
+        reservation = await ReservationService(db).cancel(current_user, reservation_id)
+        logger.info(
+            "RESERVATION cancelled — id=%s player_id=%s",
+            reservation_id,
+            current_user.id,
+        )
+        return reservation
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "RESERVATION cancel erreur — id=%s player_id=%s", reservation_id, current_user.id
+        )
+        raise
 
 
 # ── Propriétaire ──────────────────────────────────────────────────────────────
@@ -132,4 +163,17 @@ async def update_reservation_status(
     current_user: User = Depends(require_owner_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await ReservationService(db).update_status(current_user, reservation_id, data)
+    try:
+        reservation = await ReservationService(db).update_status(current_user, reservation_id, data)
+        logger.info(
+            "RESERVATION status — id=%s nouveau_status=%s owner_id=%s",
+            reservation_id,
+            getattr(data, "status", "?"),
+            current_user.id,
+        )
+        return reservation
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("RESERVATION status erreur — id=%s", reservation_id)
+        raise

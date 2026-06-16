@@ -109,6 +109,8 @@ class TerrainSummary(BaseModel):
     name: str
     city: str
     address: str
+    latitude: float | None
+    longitude: float | None
     price_per_hour: float
     average_rating: float
     capacity: int

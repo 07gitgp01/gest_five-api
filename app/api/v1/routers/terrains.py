@@ -1,9 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import PaginationParams, get_current_active_user, require_owner_or_admin
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import Page
@@ -17,6 +18,7 @@ from app.schemas.terrain import (
 from app.services.terrain_service import TerrainService
 
 router = APIRouter()
+logger = get_logger("gestfive.terrains")
 
 
 # ── Dependency de filtres ──────────────────────────────────────────────────────
@@ -112,7 +114,21 @@ async def create_terrain(
     current_user: User = Depends(require_owner_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await TerrainService(db).create(current_user, data)
+    try:
+        terrain = await TerrainService(db).create(current_user, data)
+        logger.info(
+            "TERRAIN created — id=%s name=%r ville=%s owner_id=%s",
+            terrain.id,
+            getattr(data, "name", "?"),
+            getattr(data, "city", "?"),
+            current_user.id,
+        )
+        return terrain
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("TERRAIN create erreur — owner_id=%s", current_user.id)
+        raise
 
 
 @router.patch(
@@ -126,7 +142,23 @@ async def update_terrain(
     current_user: User = Depends(require_owner_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await TerrainService(db).update(current_user, terrain_id, data)
+    try:
+        terrain = await TerrainService(db).update(current_user, terrain_id, data)
+        changed = list(data.model_dump(exclude_none=True).keys())
+        logger.info(
+            "TERRAIN updated — id=%s fields=%s owner_id=%s",
+            terrain_id,
+            changed,
+            current_user.id,
+        )
+        return terrain
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "TERRAIN update erreur — id=%s owner_id=%s", terrain_id, current_user.id
+        )
+        raise
 
 
 @router.delete(
@@ -140,4 +172,13 @@ async def delete_terrain(
     current_user: User = Depends(require_owner_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    await TerrainService(db).delete(current_user, terrain_id)
+    try:
+        await TerrainService(db).delete(current_user, terrain_id)
+        logger.info("TERRAIN deleted — id=%s owner_id=%s", terrain_id, current_user.id)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "TERRAIN delete erreur — id=%s owner_id=%s", terrain_id, current_user.id
+        )
+        raise

@@ -1,9 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Header, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user, require_owner_or_admin
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.payment import (
@@ -17,6 +18,7 @@ from app.schemas.payment import (
 from app.services.payment_service import PaymentService
 
 router = APIRouter()
+logger = get_logger("gestfive.payments")
 
 
 # ── Routes statiques en premier (évite la capture par /{payment_id}) ──────────
@@ -36,7 +38,26 @@ async def initiate_payment(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await PaymentService(db).initiate(current_user, data)
+    try:
+        result = await PaymentService(db).initiate(current_user, data)
+        logger.info(
+            "PAYMENT initiated — payment_id=%s reservation_id=%s method=%s amount=%.0f",
+            getattr(result, "payment_id", "?"),
+            data.reservation_id,
+            data.payment_method,
+            getattr(result, "amount", 0),
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "PAYMENT initiate erreur — reservation_id=%s method=%s user_id=%s",
+            data.reservation_id,
+            data.payment_method,
+            current_user.id,
+        )
+        raise
 
 
 @router.post(
@@ -68,12 +89,24 @@ async def payment_webhook(
     }
     signature = signature_map.get(provider.lower())
 
-    transaction_ref = await PaymentService(db).handle_webhook(
-        provider=provider,
-        payload_bytes=payload_bytes,
-        signature=signature,
+    logger.debug(
+        "WEBHOOK received — provider=%s payload=%d bytes sig=%s",
+        provider,
+        len(payload_bytes),
+        "oui" if signature else "non",
     )
-    return WebhookAck(received=True, transaction_reference=transaction_ref)
+
+    try:
+        transaction_ref = await PaymentService(db).handle_webhook(
+            provider=provider,
+            payload_bytes=payload_bytes,
+            signature=signature,
+        )
+        logger.info("WEBHOOK ok — provider=%s ref=%s", provider, transaction_ref or "?")
+        return WebhookAck(received=True, transaction_reference=transaction_ref)
+    except Exception:
+        logger.exception("WEBHOOK erreur — provider=%s", provider)
+        raise
 
 
 @router.get(
